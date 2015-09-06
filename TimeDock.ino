@@ -8,13 +8,14 @@
 #include <WaveUtil.h>
 #include <ArduinoPebbleSerial.h>
 
+// Pebble Serial protocol consts
 static const uint16_t SERVICE_ID = 0x1001;
 static const uint16_t SOUND_ATTRIBUTE_ID = 0x0001;
 static const size_t SOUND_ATTRIBUTE_LENGTH = 1;
 static const uint16_t UPTIME_ATTRIBUTE_ID = 0x0002;
 static const size_t UPTIME_ATTRIBUTE_LENGTH = 4;
 
-//Say time command: two bytes, first is hour in 24hrs., second is minutes
+//  Say time command: two bytes, first is hour in 24hrs., second is minutes
 static const uint16_t SAY_TIME_ATTRIBUTE_ID = 0x0003;
 static const size_t SAY_TIME_ATTRIBUTE_ID_LENGTH = 2;
 
@@ -29,6 +30,8 @@ static const uint8_t NUM_SERVICES = 1;
 static const uint8_t PEBBLE_DATA_PIN = 8;
 static uint8_t buffer[GET_PAYLOAD_BUFFER_SIZE(4)];
 
+
+// SD Card globals
 SdReader card;    // This object holds the information for the card
 FatVolume vol;    // This holds the information for the partition on the card
 FatReader root;   // This holds the information for the volumes root directory
@@ -65,20 +68,31 @@ void setup() {
 
 	isConnected = false;
 	ArduinoPebbleSerial::begin_software(PEBBLE_DATA_PIN, buffer, sizeof(buffer), Baud57600, SERVICES, NUM_SERVICES);
+  pinMode(13,OUTPUT);
 }
 
 void loop() {
+  const uint32_t current_time = millis() / 1000; //Time in integer seconds
+  static uint32_t last_LED_time = 0;
+  static bool LED_on = false;
 
 	checkDockStatus();
 
-	if (ArduinoPebbleSerial::is_connected()) {
-		static uint32_t last_notify_time = 0;
-		const uint32_t current_time = millis() / 1000;
-		if (current_time > last_notify_time) {
-			ArduinoPebbleSerial::notify(SERVICE_ID, UPTIME_ATTRIBUTE_ID);
-			last_notify_time = current_time;
-		}
+  if (ArduinoPebbleSerial::is_connected()) {
+    static uint32_t last_notify_time = 0;
+    if (current_time > last_notify_time) {
+      ArduinoPebbleSerial::notify(SERVICE_ID, UPTIME_ATTRIBUTE_ID);
+      last_notify_time = current_time;
+    }
+  }
+    
+  if (current_time > last_LED_time) {
+    LED_on = !LED_on;
+    digitalWrite(13,LED_on);
+    last_LED_time = current_time;
+
 	}
+  
 
 	uint16_t service_id;
 	uint16_t attribute_id;
@@ -243,6 +257,7 @@ void playfile(char *name) {
 	wave.play();
 }
 
+//Routines for requests from Pebble
 void handle_uptime_request(RequestType type, size_t length) {
 	if (type != RequestTypeRead) {
 		// unexpected request type
