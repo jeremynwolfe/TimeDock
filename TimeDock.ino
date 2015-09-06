@@ -170,7 +170,7 @@ void sayTime(int hour, int minute) {
 		if (hour == 0) {
 			hour = 12;
 		}
-		bool pm = (hour > 12);
+		bool pm = (hour >= 12);
 		strcpy_P(ampmFilename, PSTR("AM.WAV"));
 		if (pm) {
 			hour -= 12;
