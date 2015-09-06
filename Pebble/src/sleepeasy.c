@@ -12,12 +12,17 @@ static const size_t SayTimeAttributeIDLength = 2;
 //Passes a bool, true is a new notification, false is the notification window closes.
 static const SmartstrapAttributeId RenotifyAttributeId = 0x0004;
 static const size_t RenotifyAttributeIdLength = 1;
+//ultrasound detected something near
+static const SmartstrapAttributeId ultrasoundAttributeID = 0x005;
+static const size_t ultrasoundAttributeIdLength = 1;
+
 
 
 static SmartstrapAttribute *led_attribute;
 static SmartstrapAttribute *uptime_attribute;
 static SmartstrapAttribute *sayTime_attribute;
 static SmartstrapAttribute *renotifyAttribute;
+static SmartstrapAttribute *ultrasoundAttribute;
 
 static Window *window;
 static TextLayer *status_text_layer;
@@ -30,7 +35,7 @@ static void prv_availability_changed(SmartstrapServiceId service_id, bool availa
   }
 
   if (available) {
-    text_layer_set_background_color(status_text_layer, GColorBlue);
+    text_layer_set_background_color(status_text_layer, GColorGreen);
     text_layer_set_text(status_text_layer, "Docked");
   } else {
     text_layer_set_background_color(status_text_layer, GColorYellow);
@@ -54,34 +59,7 @@ static void prv_did_read(SmartstrapAttribute *attr, SmartstrapResult result,
 
   static char uptime_buffer[20];
   snprintf(uptime_buffer, 20, "%u", (unsigned int)*(uint32_t *)data);
-  text_layer_set_text(uptime_text_layer, uptime_buffer);
-}
-
-static void prv_notified(SmartstrapAttribute *attribute) {
-  if (attribute != uptime_attribute) {
-    return;
-  }
-  smartstrap_attribute_read(uptime_attribute);
-}
-
-
-static void PrvMakeSound() {
-  SmartstrapResult result;
-  uint8_t *buffer;
-  size_t length;
-  result = smartstrap_attribute_begin_write(led_attribute, &buffer, &length);
-  if (result != SmartstrapResultOk) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Begin write failed with error %d", result);
-    return;
-  }
-
-  buffer[0] = 1;
-
-  result = smartstrap_attribute_end_write(led_attribute, 1, false);
-  if (result != SmartstrapResultOk) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "End write failed with error %d", result);
-    return;
-  }
+  //text_layer_set_text(uptime_text_layer, uptime_buffer);
 }
 
 static void PrvSayTime() {
@@ -108,6 +86,35 @@ static void PrvSayTime() {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Minute: %u", debugVal);
 
   result = smartstrap_attribute_end_write(sayTime_attribute, 2, false);
+  if (result != SmartstrapResultOk) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "End write failed with error %d", result);
+    return;
+  }
+}
+
+static void prv_notified(SmartstrapAttribute *attribute) {
+  if (attribute == ultrasoundAttribute) {
+  	  PrvSayTime();
+  }
+  if (attribute == uptime_attribute) {
+    smartstrap_attribute_read(uptime_attribute);
+  }
+}
+
+
+static void PrvMakeSound() {
+  SmartstrapResult result;
+  uint8_t *buffer;
+  size_t length;
+  result = smartstrap_attribute_begin_write(led_attribute, &buffer, &length);
+  if (result != SmartstrapResultOk) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Begin write failed with error %d", result);
+    return;
+  }
+
+  buffer[0] = 1;
+
+  result = smartstrap_attribute_end_write(led_attribute, 1, false);
   if (result != SmartstrapResultOk) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "End write failed with error %d", result);
     return;
@@ -164,6 +171,28 @@ static void focus_handler(bool inFocus) {
   }
 }
 
+
+static void update_time() {
+ // Get a tm structure
+ time_t temp = time(NULL);
+ struct tm *tick_time = localtime(&temp);  // Create a long-lived buffer
+ static char buffer[] = "00:00";  // Write the current hours and minutes into the buffer
+ if(clock_is_24h_style() == true) {
+   // Use 24 hour format
+   strftime(buffer, sizeof("00:00"), "%H:%M", tick_time);
+ } else {
+   // Use 12 hour format
+   strftime(buffer, sizeof("00:00"), "%l:%M", tick_time);
+ }  // Display this time on the TextLayer
+ text_layer_set_text(uptime_text_layer, buffer);
+} 
+
+
+static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+ update_time();
+}
+
+
 static void window_load(Window *window) {
   window_set_background_color(window, GColorWhite);
 
@@ -175,9 +204,12 @@ static void window_load(Window *window) {
   prv_availability_changed(SERVICE_ID, smartstrap_service_is_available(SERVICE_ID));
 
   // text layer for showing the attribute
-  uptime_text_layer = text_layer_create(GRect(0, 60, 144, 40));
-  text_layer_set_font(uptime_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28));
-  text_layer_set_text_alignment(uptime_text_layer, GTextAlignmentCenter);
+//  uptime_text_layer = text_layer_create(GRect(0, 60, 144, 40));
+  uptime_text_layer = text_layer_create(GRect(0, 55, 144, 50));
+ // text_layer_set_font(uptime_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28));
+ // text_layer_set_text_alignment(uptime_text_layer, GTextAlignmentCenter);
+	text_layer_set_font(uptime_text_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+	text_layer_set_text_alignment(uptime_text_layer, GTextAlignmentCenter); 
   text_layer_set_text(uptime_text_layer, "-");
   layer_add_child(window_get_root_layer(window), text_layer_get_layer(uptime_text_layer));
 }
@@ -212,10 +244,13 @@ static void init(void) {
                                                  SayTimeAttributeIDLength);
   renotifyAttribute = smartstrap_attribute_create(SERVICE_ID, RenotifyAttributeId,
                                                  RenotifyAttributeIdLength);
-
+  ultrasoundAttribute = smartstrap_attribute_create(SERVICE_ID, ultrasoundAttributeID,
+                                                 ultrasoundAttributeIdLength);
  
   // Subscribe to Focus updates
   app_focus_service_subscribe(focus_handler);
+ // Register with TickTimerService
+ tick_timer_service_subscribe(MINUTE_UNIT, tick_handler); 
 }
 
 static void deinit(void) {
@@ -224,6 +259,7 @@ static void deinit(void) {
   smartstrap_attribute_destroy(uptime_attribute);
   smartstrap_attribute_destroy(sayTime_attribute);
   smartstrap_attribute_destroy(renotifyAttribute);
+  smartstrap_attribute_destroy(ultrasoundAttribute);
 }
 
 int main(void) {
