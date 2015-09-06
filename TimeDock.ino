@@ -154,6 +154,9 @@ void sayTime(int hour, int minute) {
 		return;
 	}
 	else {
+		if (hour == 0) {
+			hour = 12;
+		}
 		bool pm = (hour > 12);
 		strcpy_P(ampmFilename, PSTR("AM.WAV"));
 		if (pm) {
@@ -320,6 +323,6 @@ void handle_renotify_request(RequestType type, size_t length) {
 	{
 		strcpy_P(filename, PSTR("ALERT2.WAV"));
 		playcomplete(filename);
-	} 
+	}
 
 }
