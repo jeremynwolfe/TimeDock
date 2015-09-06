@@ -10,8 +10,10 @@
 
 // Pebble Serial protocol consts
 static const uint16_t SERVICE_ID = 0x1001;
+
 static const uint16_t SOUND_ATTRIBUTE_ID = 0x0001;
 static const size_t SOUND_ATTRIBUTE_LENGTH = 1;
+
 static const uint16_t UPTIME_ATTRIBUTE_ID = 0x0002;
 static const size_t UPTIME_ATTRIBUTE_LENGTH = 4;
 
@@ -24,13 +26,17 @@ static const size_t SAY_TIME_ATTRIBUTE_ID_LENGTH = 2;
 static const uint16_t RENOTIFY_ATTRIBUTE_ID = 0x0004;
 static const size_t RENOTIFY_ATTRIBUTE_ID_LENGTH = 1;
 
+//Ultrasound fired
+static const uint16_t ULTRASOUND_ATTRIBUTE_ID = 0x0005;
+static const size_t ULTRASOUND_ATTRIBUTE_ID_LENGTH = 1;
+
 static const uint16_t SERVICES[] = { SERVICE_ID };
 static const uint8_t NUM_SERVICES = 1;
 
 static const uint8_t PEBBLE_DATA_PIN = 8;
 static uint8_t buffer[GET_PAYLOAD_BUFFER_SIZE(4)];
 
-const int ULTRASOUND_THRESHOLD = 20;  // values below this mean to trigger.
+const int ULTRASOUND_THRESHOLD = 18;  // values below this mean to trigger.
 
 
 // SD Card globals
@@ -124,6 +130,7 @@ void loop() {
 }
 void checkUltraSound() {
 	// for ultrasound sensor
+	static uint32_t lastFired = 0;
 	const uint32_t current_time_tenths = millis()/100; //Time in tenths of seconds
 	static uint32_t last_Analog_time = 0;
 	int analogValue;
@@ -131,13 +138,15 @@ void checkUltraSound() {
 	static int analogOldValue2 = 1023;
 
 	// Sample analog input 0 every tenth of a second
-	if (current_time_tenths > last_Analog_time) {
+	if ((current_time_tenths > last_Analog_time) && ((millis() - lastFired) > 5000 )) {
 		analogValue = analogRead(0); // read analog pin 0
 		// check value
 		if ((analogValue < ULTRASOUND_THRESHOLD) && (analogOldValue1 < ULTRASOUND_THRESHOLD) && (analogOldValue2 < ULTRASOUND_THRESHOLD))
 		{
-			strcpy_P(filename, PSTR("ALERT.WAV"));
-			playcomplete(filename);
+			ArduinoPebbleSerial::notify(SERVICE_ID, ULTRASOUND_ATTRIBUTE_ID);
+			lastFired = millis();
+			analogOldValue1 = 1023;
+			analogOldValue2 = 1023;
 		}
 		// Update statics for next cycle
 		analogOldValue2 = analogOldValue1;
@@ -226,6 +235,7 @@ void sayTime(int hour, int minute) {
 	//delay(pauseLength);
 	playcomplete(hourFilename);
 	//delay(pauseLength);
+	keepAlive();
 	playcomplete(ohFilename);
 	if (minute > 0)
 		playcomplete(minuteFilename);
@@ -367,4 +377,13 @@ void handle_renotify_request(RequestType type, size_t length) {
 		playcomplete(filename);
 	}
 
+}
+
+void keepAlive()
+{
+	uint16_t service_id;
+	uint16_t attribute_id;
+	size_t length;
+	RequestType type;
+	ArduinoPebbleSerial::feed(&service_id, &attribute_id, &length, &type);
 }
