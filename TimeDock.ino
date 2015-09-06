@@ -68,13 +68,20 @@ void setup() {
 
 	isConnected = false;
 	ArduinoPebbleSerial::begin_software(PEBBLE_DATA_PIN, buffer, sizeof(buffer), Baud57600, SERVICES, NUM_SERVICES);
-	pinMode(13, OUTPUT);
+  pinMode(13, OUTPUT);// This pin has an on-board LED connected.
 }
 
 void loop() {
 	const uint32_t current_time = millis() / 1000; //Time in integer seconds
 	static uint32_t last_LED_time = 0;
 	static bool LED_on = false;
+  // for ultrasound sensor
+  const uint32_t current_time_tenths = millis()/100; //Time in tenths of seconds
+  static uint32_t last_Analog_time = 0;
+  int analogValue;
+  static int analogOldValue1 = 0;
+  static int analogOldValue2 = 0;
+  const int ultrasoundThreshold = 696;  // values below this mean to trigger.
 
 	checkDockStatus();
 
@@ -86,11 +93,26 @@ void loop() {
 		}
 	}
 	
-	/*if (current_time > last_LED_time) {
+  /*  Blink the LED on pin 13
+    if (current_time > last_LED_time) {
 		LED_on = !LED_on;
 		digitalWrite(13, HIGH);
 		last_LED_time = current_time;
 	}*/ 
+  // Sample analog input 0 every tenth of a second
+  if (current_time_tenths > last_Analog_time) {
+    analogValue = analogRead(0); // read analog pin 0
+    // check value
+    if ((analogValue < ultrasoundThreshold) && (analogOldValue1 < ultrasoundThreshold) && (analogOldValue2 < ultrasoundThreshold))
+    {
+      strcpy_P(filename, PSTR("ALERT.WAV"));
+      playcomplete(filename);
+    }
+    // Update statics for next cycle
+    analogOldValue2 = analogOldValue1;
+    analogOldValue1 = analogValue;
+    last_Analog_time = current_time_tenths;
+  }
 
 
 	uint16_t service_id;
