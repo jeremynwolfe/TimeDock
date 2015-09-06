@@ -30,6 +30,8 @@ static const uint8_t NUM_SERVICES = 1;
 static const uint8_t PEBBLE_DATA_PIN = 8;
 static uint8_t buffer[GET_PAYLOAD_BUFFER_SIZE(4)];
 
+const int ULTRASOUND_THRESHOLD = 20;  // values below this mean to trigger.
+
 
 // SD Card globals
 SdReader card;    // This object holds the information for the card
@@ -75,14 +77,8 @@ void loop() {
 	const uint32_t current_time = millis() / 1000; //Time in integer seconds
 	static uint32_t last_LED_time = 0;
 	static bool LED_on = false;
-  // for ultrasound sensor
-  const uint32_t current_time_tenths = millis()/100; //Time in tenths of seconds
-  static uint32_t last_Analog_time = 0;
-  int analogValue;
-  static int analogOldValue1 = 0;
-  static int analogOldValue2 = 0;
-  const int ultrasoundThreshold = 696;  // values below this mean to trigger.
 
+	checkUltraSound();
 	checkDockStatus();
 
 	if (ArduinoPebbleSerial::is_connected()) {
@@ -99,21 +95,6 @@ void loop() {
 		digitalWrite(13, HIGH);
 		last_LED_time = current_time;
 	}*/ 
-  // Sample analog input 0 every tenth of a second
-  if (current_time_tenths > last_Analog_time) {
-    analogValue = analogRead(0); // read analog pin 0
-    // check value
-    if ((analogValue < ultrasoundThreshold) && (analogOldValue1 < ultrasoundThreshold) && (analogOldValue2 < ultrasoundThreshold))
-    {
-      strcpy_P(filename, PSTR("ALERT.WAV"));
-      playcomplete(filename);
-    }
-    // Update statics for next cycle
-    analogOldValue2 = analogOldValue1;
-    analogOldValue1 = analogValue;
-    last_Analog_time = current_time_tenths;
-  }
-
 
 	uint16_t service_id;
 	uint16_t attribute_id;
@@ -139,6 +120,29 @@ void loop() {
 				break;
 			}
 		}
+	}
+}
+void checkUltraSound() {
+	// for ultrasound sensor
+	const uint32_t current_time_tenths = millis()/100; //Time in tenths of seconds
+	static uint32_t last_Analog_time = 0;
+	int analogValue;
+	static int analogOldValue1 = 1023;
+	static int analogOldValue2 = 1023;
+
+	// Sample analog input 0 every tenth of a second
+	if (current_time_tenths > last_Analog_time) {
+		analogValue = analogRead(0); // read analog pin 0
+		// check value
+		if ((analogValue < ULTRASOUND_THRESHOLD) && (analogOldValue1 < ULTRASOUND_THRESHOLD) && (analogOldValue2 < ULTRASOUND_THRESHOLD))
+		{
+			strcpy_P(filename, PSTR("ALERT.WAV"));
+			playcomplete(filename);
+		}
+		// Update statics for next cycle
+		analogOldValue2 = analogOldValue1;
+		analogOldValue1 = analogValue;
+		last_Analog_time = current_time_tenths;
 	}
 }
 
@@ -192,9 +196,10 @@ void sayTime(int hour, int minute) {
 		if (hour == 0) {
 			hour = 12;
 		}
+
 		bool pm = (hour >= 12);
 		strcpy_P(ampmFilename, PSTR("AM.WAV"));
-		if (pm) {
+		if (pm && hour != 12) {
 			hour -= 12;
 			ampmFilename[0] = 'P';
 		}
@@ -285,7 +290,8 @@ void handle_uptime_request(RequestType type, size_t length) {
 		return;
 	}
 	// write back the current uptime
-	const uint32_t uptime = millis() / 1000;
+	//const uint32_t uptime = millis() / 1000;
+	const uint32_t uptime = analogRead(0);
 	ArduinoPebbleSerial::write(true, (uint8_t *)&uptime, sizeof(uptime));
 }
 
